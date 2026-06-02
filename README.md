@@ -25,26 +25,36 @@ DropStop is a Windows system tray utility that lets you pause and resume Dropbox
 pip install -r requirements.txt
 ```
 
-### Build standalone .exe
+### Build standalone executables
 ```bash
 pip install pyinstaller
 build.bat
 ```
-The built executable will be at `dist\DropStop.exe`.
+Two executables are produced in `dist\`:
+
+| File | Purpose |
+|------|---------|
+| `DropStop.exe` | CLI / launcher — prints output, exits immediately |
+| `DropStop_tray.exe` | Background tray process — spawned automatically by `DropStop.exe` |
+
+Both files must be kept in the same directory.
 
 ## Usage
 
 ### Command Line
 
 ```
-dropstop -t 5        # Pause Dropbox for 5 minutes
-dropstop -t .5       # Pause for 30 seconds
-dropstop -t 0        # Pause indefinitely
-dropstop -r          # Resume Dropbox (overrides any timer)
-dropstop -s          # Show current status
-dropstop             # Launch tray app (no action)
-dropstop -v          # Show version
+DropStop.exe -t 5        # Pause Dropbox for 5 minutes
+DropStop.exe -t .5       # Pause for 30 seconds
+DropStop.exe -t 0        # Pause indefinitely
+DropStop.exe -r          # Resume Dropbox (overrides any timer)
+DropStop.exe -s          # Show current status
+DropStop.exe             # Launch tray app (no action)
+DropStop.exe -v          # Show version
+DropStop.exe -h          # Show help
 ```
+
+The CLI process exits immediately after sending its command. If no tray instance is running, `DropStop_tray.exe` is spawned as a detached background process so your terminal prompt returns right away.
 
 ### System Tray
 
@@ -55,6 +65,7 @@ dropstop -v          # Show version
 
 | Option | Action |
 |--------|--------|
+| Status... | Open status dialog (default action) |
 | Pause 1 minute | Pause Dropbox for 1 minute |
 | Pause 5 minutes | Pause Dropbox for 5 minutes |
 | Pause 10 minutes | Pause Dropbox for 10 minutes |
@@ -63,7 +74,6 @@ dropstop -v          # Show version
 | Pause indefinitely | Pause until manually resumed |
 | Resume Dropbox | Restart Dropbox immediately |
 | Notifications | Toggle balloon notifications on/off |
-| Status... | Open status dialog |
 | About... | Version info |
 | Exit | Resume Dropbox (if paused) and close |
 
@@ -85,16 +95,19 @@ On first run, DropStop auto-detects the Dropbox path. If it can't find it, a fil
 ```bash
 python -m dropstop.main
 python -m dropstop.main -t 5
+python -m dropstop.main -s
 python -m dropstop.main -r
 ```
 
 ## Architecture
 
-- **IPC**: Localhost TCP socket on port 49152 (no firewall prompt)
-- **Single instance**: Second launch sends command to first via IPC
-- **Timer**: Background thread with cancelable timer
-- **Tray**: pystray with Windows notification support
-- **Process management**: psutil for finding/killing Dropbox, subprocess for restarting
+- **Two-process design**: `DropStop.exe` is a short-lived CLI process; `DropStop_tray.exe` is the long-running background tray process. This keeps the terminal prompt responsive and avoids shared-tempdir cleanup issues.
+- **IPC**: Localhost TCP socket on port 49152 — subsequent CLI calls route to the running tray instance (no firewall prompt).
+- **Single instance**: If a tray is already running, CLI commands are forwarded via IPC and the CLI exits immediately.
+- **Timer**: Background thread with cancelable timer.
+- **Tray**: pystray with Windows notification support.
+- **Tkinter thread safety**: All dialogs run on a single dedicated Tk thread via a shared `Tk` root, preventing `Tcl_AsyncDelete` crashes on repeated opens.
+- **Process management**: psutil for finding/killing Dropbox, subprocess for restarting.
 
 ## License
 
